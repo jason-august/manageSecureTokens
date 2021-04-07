@@ -4,18 +4,12 @@
 # Script created as proof of concept for blogpost https://travellingtechguy.eu/script-secure-tokens-mojave
 
 # The idea is to run this prior to enabling FileVault remotely.
-# This to ensure we have the correct Secure Tokens in place in case you want to manipulate Secure Tokens with an 'IT Admin' accouont later.
-# Mainly to avoid ending up with a FileVault Enabled Mac, with only a tokenised non-admin enduser.
+# This to ensure we have the correct Secure Tokens in place in case you want to manipulate Secure Tokens with an 'IT Admin' account later.
 
 # Script below uses $4 and $5 to pass the "IT Admin" credentials, but I would recommend to have a look at the GitHub link below to add more security.
 # Encrypt Admin credentials passed via script in Jamf Pro: https://github.com/jamfit/Encrypted-Script-Parameters/blob/master/EncryptedStrings_Bash.sh
 
-# Flying Dutch Sysadmin - 23/01/19 - V1.2
-# Added Checks : - Check if an admin account exists, and if it does if it is admin , if not the script fixes it. 
-# Echo statements provided for troubleshooting.
-
 # AS ALWAYS: script provided AS IS. Mainly a proof of concept for the above blogpost. TEST and EVALUATE before using it in production.
-
 
 # Check if a User is logged in
 if pgrep -x "Finder" \
@@ -23,53 +17,18 @@ if pgrep -x "Finder" \
 && [ "$CURRENTUSER" != "_mbsetupuser" ]; then
 
 # additional Admin credentials
-addAdminUser=$4
+LocalAdmin=$4
 #add encryption
-addAdminUserPassword=$5
+LocalAdminPassword=$5
 
-# Check if the admin provided exists on the system
-		if [[ $("/usr/sbin/dseditgroup" -o checkmember -m $addAdminUser admin / 2>&1) =~ "Unable" ]]; then
-  		addAdminUserType="LiesItDoesNotExists"
-  		else
-  		addAdminUserType="AllGood"
-		fi
-			if [ "$addAdminUserType" = LiesItDoesNotExists ]; then 
-			echo "Admin user status: LIES! it did not exist go check the data" && exit 20      
-        else
-        echo "Admin user status: You where right! the account did exists"
-fi
 # Check if our admin has a Secure Token
 
-  		if [[ $("/usr/sbin/sysadminctl" -secureTokenStatus "$addAdminUser" 2>&1) =~ "ENABLED" ]]; then
+  		if [[ $("/usr/sbin/sysadminctl" -secureTokenStatus "$LocalAdmin" 2>&1) =~ "ENABLED" ]]; then
   		adminToken="true"
   		else
     	adminToken="false"
     	fi
   		echo "Admin Token: $adminToken"
-# Check if $addAdminUser is actually an administrator
-
-		if [[ $("/usr/sbin/dseditgroup" -o checkmember -m $addAdminUser admin / 2>&1) =~ "yes" ]]; then
-  					AdminUserType="ItWasAdmin"
-  					else
-  					AdminUserType="LiesItWasNotAdmin"
-					fi
-                    echo "Admin Account Status: $AdminUserType"
-#Fixing the admin to make it admin		
-		if [ "$AdminUserType" = LiesItWasNotAdmin ]; then
-		dscl . -append /groups/admin GroupMembership $addAdminUser 
-        echo "Admin Promo status: It wasnt admin but now it is"
-		else
-        echo "Admin Promo status: No Action Needed "
-        fi
-# Check if FileVault is Enabled
-# I'm not using this variable in the rest of the script. Only added it in case you want to customise the script and enable FileVault at the end if 'fvStatus' is false
-		
-		if [[ $("/usr/bin/fdesetup" status 2>&1) =~ "FileVault is On." ]]; then
-  		fvStatus="true"
-  		else
-  		fvStatus="false"
-  		fi
-  		echo "FV Status: $fvStatus"
 
 # Check Secure Tokens Status - Do we have any Token Holder?
 
@@ -128,10 +87,10 @@ fi
 								    echo "Password OK for $userName"
 								fi
 
-				# If additional admin has a token but end user does not
+				# If local admin has a token but end user does not
 
 				if [[ $adminToken = "true" && $userToken = "false" ]]; then
-				sysadminctl -adminUser $addAdminUser -adminPassword $addAdminUserPassword -secureTokenOn $userName -password $userPass
+				sysadminctl -adminUser $LocalAdmin -adminPassword $LocalAdminPassword -secureTokenOn $userName -password $userPass
 
 				echo "Token granted to end user!"
 
@@ -140,9 +99,9 @@ fi
 
 				# If no Token Holder exists, just grant both admin and end user a token
 				if [[ $tokenStatus = "false" && $userToken="false" ]]; then
-				sysadminctl -adminUser $addAdminUser -adminPassword $addAdminUserPassword -secureTokenOn $userName -password $userPass
+				sysadminctl -adminUser $LocalAdmin -adminPassword $LocalAdminPassword -secureTokenOn $userName -password $userPass
 
-				echo "Token granted to both additional admin and end user!"
+				echo "Token granted to both local admin and end user!"
 
 				diskutil apfs listcryptousers /
 				fi
@@ -150,14 +109,14 @@ fi
 				# If end user is an admin Token holder while our additional admin does not have one
 
 				if [[ $userType = "Admin" && $userToken = "true" && $adminToken = "false" ]]; then
-				sysadminctl -adminUser $userName -adminPassword $userPass -secureTokenOn $addAdminUser -password $addAdminUserPassword
+				sysadminctl -adminUser $userName -adminPassword $userPass -secureTokenOn $LocalAdmin -password $LocalAdminPassword
 
-				echo "End user admin token holder granted token to additional admin!"
+				echo "End user admin token holder granted token to local admin!"
 
 				diskutil apfs listcryptousers /
 				fi
 
-				# If end user is a non-admin token holder and our additional admin does not have a Token yet
+				# If end user is a non-admin token holder and our local admin does not have a Token yet
 
 				if [[ $userType = "Not admin" && $userToken = "true" && $adminToken = "false" ]]; then
 				echo "Houston we have a problem!"
